@@ -172,6 +172,15 @@
     .field-id-card label { font-size: 0.72rem; margin-bottom: 5px; }
     .field-id-card input[type="text"] { font-size: 0.82rem; padding: 9px 12px; }
     .field-id-card input[type="text"]::placeholder { font-size: 0.78rem; }
+    /* 画像メモ入力欄 */
+    .note-row { margin-top: 8px; }
+    .note-input {
+      width: 100%; padding: 9px 12px; font-size: 0.82rem; border: none; border-radius: 0;
+      background: var(--subtle); color: var(--ink); resize: vertical; min-height: 38px; line-height: 1.4;
+      font-family: inherit; transition: box-shadow 0.15s ease, background 0.15s ease;
+    }
+    .note-input::placeholder { color: var(--muted); font-size: 0.78rem; }
+    .note-input:focus { outline: none; background: var(--surface); box-shadow: 0 0 0 2px var(--accent); }
   </style>
 </head>
 <body>
@@ -237,6 +246,9 @@
             <input type="file" id="imgFieldHigh" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldHigh')">
             <span id="imgFieldHigh_name" class="capture-filename empty">未撮影</span>
           </div>
+          <div class="note-row">
+            <textarea id="imgFieldHigh_note" class="note-input" rows="1" placeholder="img1 のメモ（任意）"></textarea>
+          </div>
         </div>
         <div class="form-group">
           <label for="imgFieldLow">img2</label>
@@ -244,6 +256,9 @@
             <label for="imgFieldLow" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgFieldLow" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldLow')">
             <span id="imgFieldLow_name" class="capture-filename empty">未撮影</span>
+          </div>
+          <div class="note-row">
+            <textarea id="imgFieldLow_note" class="note-input" rows="1" placeholder="img2 のメモ（任意）"></textarea>
           </div>
         </div>
         <div class="form-group">
@@ -253,6 +268,9 @@
             <input type="file" id="imgPlant" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgPlant')">
             <span id="imgPlant_name" class="capture-filename empty">未撮影</span>
           </div>
+          <div class="note-row">
+            <textarea id="imgPlant_note" class="note-input" rows="1" placeholder="img3 のメモ（任意）"></textarea>
+          </div>
         </div>
         <div class="form-group">
           <label for="imgBase">img4</label>
@@ -261,6 +279,9 @@
             <input type="file" id="imgBase" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgBase')">
             <span id="imgBase_name" class="capture-filename empty">未撮影</span>
           </div>
+          <div class="note-row">
+            <textarea id="imgBase_note" class="note-input" rows="1" placeholder="img4 のメモ（任意）"></textarea>
+          </div>
         </div>
         <div class="form-group">
           <label for="imgGround">img5</label>
@@ -268,6 +289,9 @@
             <label for="imgGround" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgGround" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgGround')">
             <span id="imgGround_name" class="capture-filename empty">未撮影</span>
+          </div>
+          <div class="note-row">
+            <textarea id="imgGround_note" class="note-input" rows="1" placeholder="img5 のメモ（任意）"></textarea>
           </div>
         </div>
       </div>
@@ -412,12 +436,13 @@
     };
 
     // 画像アップロード項目の定義（img1・img2・img3・img4・img5の5点）
+    // noteId … 各画像に対応するメモ欄(textarea)のid（GAS側の noteKey と一致させること）
     const IMAGE_FIELDS = [
-      { id: "imgFieldHigh", key: "imgFieldHigh", label: "img1" },
-      { id: "imgFieldLow",  key: "imgFieldLow",  label: "img2" },
-      { id: "imgPlant",     key: "imgPlant",     label: "img3" },
-      { id: "imgBase",      key: "imgBase",      label: "img4" },
-      { id: "imgGround",    key: "imgGround",    label: "img5" }
+      { id: "imgFieldHigh", key: "imgFieldHigh", label: "img1", noteId: "imgFieldHigh_note" },
+      { id: "imgFieldLow",  key: "imgFieldLow",  label: "img2", noteId: "imgFieldLow_note"  },
+      { id: "imgPlant",     key: "imgPlant",     label: "img3", noteId: "imgPlant_note"     },
+      { id: "imgBase",      key: "imgBase",      label: "img4", noteId: "imgBase_note"      },
+      { id: "imgGround",    key: "imgGround",    label: "img5", noteId: "imgGround_note"    }
     ];
 
     // よく使う要素をまとめてキャッシュ
@@ -777,6 +802,9 @@
         const nameSpan = document.getElementById(f.id + '_name');
         nameSpan.innerText = "未撮影";
         nameSpan.classList.add('empty'); nameSpan.classList.remove('done');
+        // メモ欄もクリア
+        const noteEl = document.getElementById(f.noteId);
+        if (noteEl) noteEl.value = "";
       });
     }
 
@@ -909,6 +937,13 @@
           const fileName = buildSurrogateKey(timestamp, userName, fieldId, f.label);
           payload[f.key] = compressed[i];
           payload[f.key + "_filename"] = fileName;
+        });
+
+        // ★ 各画像のメモ（img1note〜img5note）を送信
+        //    画像が無くてもメモが入力されていれば記録する（全5項目を常に送信）
+        IMAGE_FIELDS.forEach((f) => {
+          const noteEl = document.getElementById(f.noteId);
+          payload[f.key + "_note"] = noteEl ? noteEl.value.trim() : "";
         });
 
         await fetch(CONFIG.GAS_WEB_APP_URL, {
