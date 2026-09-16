@@ -224,14 +224,14 @@
       </div>
 
       <!--
-        画像選択エリア（町全体(高視点)／町全体(低視点)／通りの賑わい／人の様子／地面の5点）
+        画像選択エリア（img1／img2／img3／img4／img5の5点）
         ※ accept="image/*" と capture="environment" を分けて指定することで
           Android(Chrome)・iOS(Safari)の両方でタップ時にカメラ(背面)を直接起動します。
           （accept="image/*;capture=camera" のような結合指定はAndroidでカメラが起動しない不具合の原因になるため使用しない）
       -->
       <div class="card">
         <div class="form-group">
-          <label for="imgFieldHigh">1. 町全体（高視点）</label>
+          <label for="imgFieldHigh">img1</label>
           <div class="capture-row">
             <label for="imgFieldHigh" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgFieldHigh" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldHigh')">
@@ -239,7 +239,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="imgFieldLow">2. 町全体（低視点）</label>
+          <label for="imgFieldLow">img2</label>
           <div class="capture-row">
             <label for="imgFieldLow" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgFieldLow" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldLow')">
@@ -247,7 +247,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="imgPlant">3. 通りの賑わい</label>
+          <label for="imgPlant">img3</label>
           <div class="capture-row">
             <label for="imgPlant" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgPlant" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgPlant')">
@@ -255,7 +255,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="imgBase">4. 人の様子</label>
+          <label for="imgBase">img4</label>
           <div class="capture-row">
             <label for="imgBase" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgBase" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgBase')">
@@ -263,7 +263,7 @@
           </div>
         </div>
         <div class="form-group">
-          <label for="imgGround">5. 地面</label>
+          <label for="imgGround">img5</label>
           <div class="capture-row">
             <label for="imgGround" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
             <input type="file" id="imgGround" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgGround')">
@@ -411,13 +411,13 @@
       }
     };
 
-    // 画像アップロード項目の定義（町全体(高視点)・町全体(低視点)・通りの賑わい・人の様子・地面の5点）
+    // 画像アップロード項目の定義（img1・img2・img3・img4・img5の5点）
     const IMAGE_FIELDS = [
-      { id: "imgFieldHigh", key: "imgFieldHigh", label: "町全体（高視点）" },
-      { id: "imgFieldLow",  key: "imgFieldLow",  label: "町全体（低視点）" },
-      { id: "imgPlant",     key: "imgPlant",     label: "通りの賑わい" },
-      { id: "imgBase",      key: "imgBase",      label: "人の様子" },
-      { id: "imgGround",    key: "imgGround",    label: "地面" }
+      { id: "imgFieldHigh", key: "imgFieldHigh", label: "img1" },
+      { id: "imgFieldLow",  key: "imgFieldLow",  label: "img2" },
+      { id: "imgPlant",     key: "imgPlant",     label: "img3" },
+      { id: "imgBase",      key: "imgBase",      label: "img4" },
+      { id: "imgGround",    key: "imgGround",    label: "img5" }
     ];
 
     // よく使う要素をまとめてキャッシュ
