@@ -1,1 +1,911 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>GrAInY</title>
 
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <style>
+    :root {
+      --bg: #f5f6f8;
+      --surface: #ffffff;
+      --ink: #1a1a1a;
+      --muted: #8a8f98;
+      --subtle: #f0f1f4;
+      --accent: #111111;
+      --danger: #c0392b;
+      --radius: 0px;   /* UI全体を四角（角丸なし）に */
+      --shadow: 0 1px 3px rgba(0,0,0,0.04), 0 6px 20px rgba(0,0,0,0.05);
+    }
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      margin: 0;
+      padding: 8px 8px;
+      background-color: var(--bg);
+      color: var(--ink);
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;  /* 横方向のはみ出しによる画面ズレを防止 */
+    }
+    .container { max-width: 640px; width: 100%; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; }
+    h1 { font-size: 1.05rem; font-weight: 700; margin: 0; color: var(--ink); letter-spacing: 0.06em; text-transform: uppercase; }
+    /* タイトル文字の代わりに表示するロゴ画像 */
+    .site-logo { display: inline-flex; align-items: center; line-height: 0; }
+    .site-logo img { display: block; width: auto; height: 44px; }
+
+    /* カード：枠線なし・柔らかい影のみ */
+    .card { background: var(--surface); border-radius: var(--radius); padding: 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+    .form-group { margin-bottom: 14px; }
+    .form-group:last-child { margin-bottom: 0; }
+    label { font-size: 0.82rem; font-weight: 600; display: block; margin-bottom: 7px; color: var(--ink); }
+
+    /* 入力：枠線なし・淡い塗りで表現 */
+    input[type="text"], input[type="password"] {
+      width: 100%; padding: 12px 14px; font-size: 1rem; border: none; border-radius: 0;
+      background: var(--subtle); color: var(--ink); transition: box-shadow 0.15s ease, background 0.15s ease;
+    }
+    input[type="text"]::placeholder, input[type="password"]::placeholder { color: var(--muted); }
+    input[type="text"]:focus, input[type="password"]:focus {
+      outline: none; background: var(--surface); box-shadow: 0 0 0 2px var(--accent);
+    }
+    input[type="file"] { width: 100%; font-size: 0.85rem; color: #333333; }
+
+    /* カメラ撮影ボタン */
+    .capture-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+    .file-input-hidden {
+      position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden;
+      clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+    }
+    .btn-capture {
+      display: inline-flex; align-items: center; gap: 7px; padding: 11px 18px; background: var(--accent); color: #ffffff;
+      border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+      transition: opacity 0.15s ease;
+    }
+    .btn-capture:active { opacity: 0.7; }
+    .capture-filename { font-size: 0.8rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; min-width: 0; }
+    .capture-filename.empty { color: var(--muted); }
+    .capture-filename.done { color: var(--ink); font-weight: 600; }
+
+    /* 地図：枠線なし・角丸のみ */
+    /* 地図は縦を大きめに。画面高に追従（小型端末でも破綻しない範囲でmax） */
+    #map { height: clamp(414px, 74vh, 990px); width: 100%; border-radius: 0; margin-bottom: 8px; }
+    /* 地図カードは余白を最小化して地図を最大化 */
+    .map-card { padding: 8px; margin-bottom: 10px; }
+    .map-card .legend { margin-bottom: 8px; }
+    .map-card .coords-wrapper { padding: 6px 8px; }
+    .map-hint { font-size: 0.75rem; color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+    /* SVGアイコン共通 */
+    .icon { width: 1em; height: 1em; flex-shrink: 0; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; vertical-align: -0.125em; }
+    .btn-capture .icon, .link-btn .icon { width: 1.05em; height: 1.05em; }
+    .capture-filename .icon { width: 0.9em; height: 0.9em; stroke: var(--ink); margin-right: 2px; }
+
+    /* 品種の凡例 */
+    .legend { display: flex; flex-wrap: wrap; gap: 7px 14px; margin-bottom: 10px; }
+    .legend-item { display: flex; align-items: center; gap: 6px; font-size: 0.75rem; color: #4a4f57; }
+    .legend-dot { width: 11px; height: 11px; border-radius: 50%; box-shadow: 0 0 0 2px #fff, 0 1px 2px rgba(0,0,0,0.15); flex-shrink: 0; }
+
+    /* 座標表示：淡い塗りのみ */
+    .coords-wrapper {
+      display: flex; justify-content: space-between; align-items: center; background: var(--subtle);
+      padding: 8px 10px; border-radius: 0; font-size: 0.72rem;
+    }
+    .coords-val { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-weight: 600; color: var(--ink); }
+    .coords-val.warn { color: var(--danger); }
+    .coords-source { font-size: 0.7rem; color: var(--muted); margin-top: 6px; }
+    .btn-gps {
+      background: var(--surface); border: none; color: var(--ink); padding: 5px 10px; font-size: 0.66rem;
+      font-weight: 600; border-radius: 0; cursor: pointer; box-shadow: 0 1px 2px rgba(0,0,0,0.12);
+      transition: opacity 0.15s ease;
+    }
+    .btn-gps:active { opacity: 0.6; }
+
+    /* 送信ボタン */
+    .btn-submit {
+      width: 100%; padding: 15px; background-color: var(--accent); color: #ffffff; border: none; border-radius: 0;
+      font-size: 0.95rem; font-weight: 700; letter-spacing: 0.05em; cursor: pointer; box-shadow: var(--shadow);
+      transition: opacity 0.15s ease;
+    }
+    .btn-submit:active { opacity: 0.8; }
+    .btn-submit:disabled { background-color: var(--muted); cursor: not-allowed; box-shadow: none; }
+    .status-msg { margin-top: 12px; font-size: 0.85rem; text-align: center; font-weight: 600; }
+    .success { color: var(--ink); }
+    .error { color: var(--danger); }
+
+    /* ヘッダー右上の設定ボタン：下線を廃しチップ風に */
+    .link-btn {
+      display: inline-flex; align-items: center; gap: 5px; background: var(--surface); border: none; color: #4a4f57;
+      font-size: 0.75rem; font-weight: 600; cursor: pointer; padding: 7px 12px; border-radius: 0;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.08); transition: opacity 0.15s ease;
+    }
+    .link-btn:active { opacity: 0.6; }
+
+    /* 現在のユーザー名表示 */
+
+    /* モーダル：枠線なし・影で浮遊感 */
+    .modal-overlay {
+      display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(20, 22, 26, 0.5);
+      z-index: 9999; justify-content: center; align-items: center; padding: 20px; backdrop-filter: blur(2px);
+    }
+    .modal-card {
+      background: var(--surface); border: none; border-radius: 0; max-width: 400px; width: 100%; padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.25); max-height: 85vh; overflow-y: auto;
+    }
+    .modal-title { font-size: 1.05rem; font-weight: 700; margin-top: 0; margin-bottom: 14px; color: var(--ink); }
+    .modal-body { font-size: 0.85rem; line-height: 1.55; color: #4a4f57; margin-bottom: 18px; }
+    .modal-body ol { padding-left: 20px; margin: 8px 0; }
+    .os-block { background: var(--subtle); border-radius: 0; padding: 10px 12px; margin-top: 10px; }
+    .os-block.current { background: #e9eaee; box-shadow: inset 0 0 0 1.5px var(--accent); }
+    .os-block strong { display: block; margin-bottom: 4px; color: var(--ink); }
+    .os-badge { display: inline-block; font-size: 0.7rem; font-weight: 600; background: var(--accent); color: #fff; border-radius: 0; padding: 2px 8px; margin-left: 6px; vertical-align: middle; }
+    .modal-actions { display: flex; gap: 10px; }
+    .modal-btn { flex: 1; padding: 12px; background: var(--accent); color: #ffffff; border: none; border-radius: 0; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s ease; }
+    .modal-btn:active { opacity: 0.8; }
+    .modal-btn.secondary { background: var(--subtle); color: var(--ink); }
+
+    .show-key-row { display: flex; align-items: center; gap: 7px; margin-top: 10px; font-size: 0.8rem; color: #4a4f57; }
+    .show-key-row input { width: auto; }
+
+    /* ===== 2ステップ画面遷移（ステップ表示なし） ===== */
+    .step-screen { display: none; }
+    /* 中央寄せを担保。アニメーションは横移動を避け、フェードのみにして画面ズレを防止 */
+    .step-screen.active { display: block; width: 100%; animation: stepFadeIn 0.25s ease; }
+    @keyframes stepFadeIn { from { opacity: 0; } to { opacity: 1; } }
+    .btn-next { width: 100%; padding: 15px; background-color: var(--accent); color: #fff; border: none; border-radius: 0; font-size: 0.95rem; font-weight: 700; letter-spacing: 0.04em; cursor: pointer; box-shadow: var(--shadow); transition: opacity 0.15s ease; }
+    .btn-next:active { opacity: 0.8; }
+    .step-nav { display: flex; gap: 10px; align-items: stretch; }
+    .step-nav .btn-submit { flex: 1; width: auto; }
+    .btn-back { padding: 15px 18px; background: var(--subtle); color: var(--ink); border: none; border-radius: 0; font-size: 0.9rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s ease; flex-shrink: 0; }
+    .btn-back:active { opacity: 0.6; }
+    .selected-summary { background: var(--subtle); border-radius: 0; padding: 12px 14px; margin-bottom: 16px; font-size: 0.85rem; }
+    .selected-summary .row { display: flex; justify-content: space-between; gap: 10px; }
+    .selected-summary .row + .row { margin-top: 6px; }
+    .selected-summary .label { color: var(--muted); flex-shrink: 0; }
+    .selected-summary .val { font-weight: 600; color: var(--ink); text-align: right; word-break: break-all; }
+    /* 欄外（カード外）のGPS説明 */
+    .field-note { font-size: 0.75rem; color: var(--muted); line-height: 1.5; margin: -6px 2px 16px; display: flex; align-items: flex-start; gap: 6px; }
+    .field-note .icon { margin-top: 2px; }
+    /* 圃場ID／現在地取得まわりのフォントを小さめに（スコープ限定） */
+    .field-id-card label { font-size: 0.72rem; margin-bottom: 5px; }
+    .field-id-card input[type="text"] { font-size: 0.82rem; padding: 9px 12px; }
+    .field-id-card input[type="text"]::placeholder { font-size: 0.78rem; }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <div class="header">
+      <span class="site-logo"><img src="data:image/png;base64,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" alt="GrAInY" /></span>
+      <button type="button" class="link-btn" onclick="openSecretKeyModal(true)">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="8" cy="15" r="4"></circle><line x1="10.85" y1="12.15" x2="19" y2="4"></line><line x1="18" y1="5" x2="20" y2="7"></line><line x1="15" y1="8" x2="17" y2="10"></line></svg>
+        設定変更
+      </button>
+    </div>
+
+    <!-- ============ Step 1: 圃場選択・GPS取得 ============ -->
+    <div id="step1" class="step-screen active">
+      <!-- 地図・位置情報（GPSで自動取得） -->
+      <div class="card map-card">
+        <div id="map"></div>
+        <div id="legend" class="legend"></div>
+        <div class="coords-wrapper">
+          <div>
+            <span>Lat: <span id="lat" class="coords-val">未取得</span></span>
+            <span style="margin-left: 8px;">Lng: <span id="lng" class="coords-val">未取得</span></span>
+          </div>
+          <button type="button" class="btn-gps" onclick="getCurrentLocation()">現在地取得</button>
+        </div>
+      </div>
+      <!-- GPS説明（欄外＝カード外に配置） -->
+      <div class="field-note">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 21s-6-5.686-6-10a6 6 0 0 1 12 0c0 4.314-6 10-6 10z"></path><circle cx="12" cy="11" r="2"></circle></svg>
+        <span>位置情報はGPSで自動取得されます。地図上の圃場ピンをタップすると「圃場ID」が自動入力されます。</span>
+      </div>
+
+      <!-- 圃場ID入力 -->
+      <div class="card field-id-card">
+        <div class="form-group">
+          <label for="fieldId">圃場ID</label>
+          <input type="text" id="fieldId" placeholder="地図の圃場ピンをタップして選択" readonly inputmode="none" required>
+        </div>
+      </div>
+
+      <button id="toStep2Btn" class="btn-next" onclick="goToStep2()">次へ：写真撮影 &rarr;</button>
+    </div>
+
+    <!-- ============ Step 2: 写真撮影 ============ -->
+    <div id="step2" class="step-screen">
+      <div class="selected-summary">
+        <div class="row"><span class="label">圃場ID</span><span class="val" id="summaryFieldId">-</span></div>
+        <div class="row"><span class="label">座標 (Lat, Lng)</span><span class="val" id="summaryCoords">-</span></div>
+      </div>
+
+      <!--
+        画像選択エリア（圃場全体(高視点)／圃場全体(低視点)／稲株全体／株元／地面の5点）
+        ※ accept="image/*" と capture="environment" を分けて指定することで
+          Android(Chrome)・iOS(Safari)の両方でタップ時にカメラ(背面)を直接起動します。
+          （accept="image/*;capture=camera" のような結合指定はAndroidでカメラが起動しない不具合の原因になるため使用しない）
+      -->
+      <div class="card">
+        <div class="form-group">
+          <label for="imgFieldHigh">1. 圃場全体（高視点）</label>
+          <div class="capture-row">
+            <label for="imgFieldHigh" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
+            <input type="file" id="imgFieldHigh" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldHigh')">
+            <span id="imgFieldHigh_name" class="capture-filename empty">未撮影</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="imgFieldLow">2. 圃場全体（低視点）</label>
+          <div class="capture-row">
+            <label for="imgFieldLow" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
+            <input type="file" id="imgFieldLow" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgFieldLow')">
+            <span id="imgFieldLow_name" class="capture-filename empty">未撮影</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="imgPlant">3. 稲株全体</label>
+          <div class="capture-row">
+            <label for="imgPlant" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
+            <input type="file" id="imgPlant" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgPlant')">
+            <span id="imgPlant_name" class="capture-filename empty">未撮影</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="imgBase">4. 株元</label>
+          <div class="capture-row">
+            <label for="imgBase" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
+            <input type="file" id="imgBase" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgBase')">
+            <span id="imgBase_name" class="capture-filename empty">未撮影</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="imgGround">5. 地面</label>
+          <div class="capture-row">
+            <label for="imgGround" class="btn-capture"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 8h3.5l1.5-2h8l1.5 2H21a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z"></path><circle cx="12" cy="13" r="3.5"></circle></svg>撮影</label>
+            <input type="file" id="imgGround" class="file-input-hidden" accept="image/*" capture="environment" onchange="onCaptureChange('imgGround')">
+            <span id="imgGround_name" class="capture-filename empty">未撮影</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="step-nav">
+        <button type="button" class="btn-back" onclick="goToStep1()">&larr; 戻る</button>
+        <button id="sendBtn" class="btn-submit" onclick="sendData()">送信</button>
+      </div>
+      <div id="status" class="status-msg"></div>
+    </div>
+  </div>
+
+  <!-- GPS権限案内モーダル（Android / iOS 両対応） -->
+  <div id="gpsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">位置情報（GPS）の利用が許可されていません</div>
+      <div class="modal-body">
+        <p style="margin-top:0;">このアプリで位置情報を使用するには、端末とブラウザの設定で位置情報の利用を許可する必要があります。以下の手順に従って設定を変更してください。</p>
+
+        <div id="iosBlock" class="os-block">
+          <strong>■ iOS (Safari) の場合<span id="iosBadge" class="os-badge" style="display:none;">この端末</span></strong>
+          <ol>
+            <li>「設定」＞「プライバシーとセキュリティ」＞「位置情報サービス」をオン</li>
+            <li>「設定」＞「Safari」＞「位置情報」＞「許可」を選択</li>
+            <li>ブラウザに戻り、画面を再読み込み</li>
+          </ol>
+        </div>
+
+        <div id="androidBlock" class="os-block">
+          <strong>■ Android (Chrome) の場合<span id="androidBadge" class="os-badge" style="display:none;">この端末</span></strong>
+          <ol>
+            <li>アドレスバー左横の鍵（または「i」）アイコンをタップ</li>
+            <li>「権限」または「サイトの設定」をタップ</li>
+            <li>「位置情報」を「許可」に変更し、画面を再読み込み</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" onclick="closeGpsModal()">閉じる</button>
+        <button class="modal-btn" onclick="retryLocationFromModal()">再試行</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ユーザー名・送信キー入力モーダル -->
+  <div id="secretKeyModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-title">利用者情報の入力</div>
+      <div class="modal-body">
+        <p style="margin-top:0;">データ送信には「ユーザー名」と、管理者から共有された「送信キー」が必要です。一度入力するとこの端末のブラウザに保存され、次回以降の入力は不要になります。</p>
+
+        <div class="form-group">
+          <label for="userNameInput">ユーザー名（記録者）</label>
+          <input type="text" id="userNameInput" placeholder="例: 細川 貴昭" autocomplete="off">
+        </div>
+
+        <div class="form-group" style="margin-bottom:0;">
+          <label for="secretKeyInput">送信キー</label>
+          <input type="password" id="secretKeyInput" placeholder="送信キーを入力" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false">
+          <div class="show-key-row">
+            <input type="checkbox" id="showSecretKeyChk" onchange="toggleSecretKeyVisibility()">
+            <label for="showSecretKeyChk" style="margin:0; font-weight:400;">キーを表示する</label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" onclick="closeSecretKeyModal()">キャンセル</button>
+        <button class="modal-btn" onclick="saveUserSettings()">保存して続行</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <script>
+    // =============================================================
+    // ★ 設定項目
+    // =============================================================
+    const CONFIG = {
+      GAS_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwqVeq6e8UOXKfpIjgECy94BX3I-Q9i-WYHQG6fdGTYG2TNi8DM2XPPz6ussF7DCS5A/exec", // ご自身のGASのWeb App URL
+      FIELD_JSON_URL: "KSAS_field.json",   // index.html と同じフォルダに配置する圃場データ
+      SECRET_KEY_STORAGE_NAME: "fieldCollector_secretKey",
+      USER_NAME_STORAGE_NAME: "fieldCollector_userName",
+      DEFAULT_LAT: 34.898154,   // 圃場データの中心付近（兵庫県加東市）
+      DEFAULT_LNG: 135.060832,
+      IMAGE_MAX_SIDE: 1280,
+      IMAGE_QUALITY: 0.75
+    };
+
+    // =============================================================
+    // 永続ストレージ（iOS対策）
+    //   iOSのSafariでは以下の理由でlocalStorageが消える/保存できないことがある:
+    //     - プライベートブラウズ時は setItem が例外を投げる（従来コードはtry/catchが無く保存に失敗）
+    //     - ホーム画面追加(standalone)時のストレージが揮発しやすい
+    //     - ITP により一定期間アクセスが無いとスクリプト保存データが削除される
+    //   そこで localStorage と Cookie の二重書き込み＆二重読み出しで冗長化し、
+    //   例外も握りつぶさず安全にフォールバックする。
+    // =============================================================
+    const Store = {
+      _cookieDays: 3650,  // Cookie有効期限（可能な限り長期）
+      setCookie(name, value) {
+        try {
+          const d = new Date();
+          d.setTime(d.getTime() + this._cookieDays * 24 * 60 * 60 * 1000);
+          const secure = location.protocol === 'https:' ? '; Secure' : '';
+          document.cookie = name + '=' + encodeURIComponent(value) +
+            '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax' + secure;
+        } catch (e) { /* Cookie無効環境は無視 */ }
+      },
+      getCookie(name) {
+        try {
+          const key = name + '=';
+          const parts = document.cookie ? document.cookie.split(';') : [];
+          for (let c of parts) {
+            c = c.trim();
+            if (c.indexOf(key) === 0) return decodeURIComponent(c.substring(key.length));
+          }
+        } catch (e) { /* 無視 */ }
+        return null;
+      },
+      set(name, value) {
+        // localStorage（例外を握って継続）＋ Cookie の両方へ
+        try { localStorage.setItem(name, value); } catch (e) { console.warn('localStorage.setItem失敗:', e); }
+        this.setCookie(name, value);
+      },
+      get(name) {
+        // localStorage優先、失敗/未保存ならCookieから復元し、両者を再同期
+        let v = null;
+        try { v = localStorage.getItem(name); } catch (e) { console.warn('localStorage.getItem失敗:', e); }
+        if (v == null) {
+          const cv = this.getCookie(name);
+          if (cv != null) {
+            v = cv;
+            try { localStorage.setItem(name, cv); } catch (e) { /* 無視 */ }
+          }
+        } else {
+          // localStorageにあってもCookieが消えていれば書き戻す（冗長性維持）
+          if (this.getCookie(name) == null) this.setCookie(name, v);
+        }
+        return v;
+      }
+    };
+
+    // 画像アップロード項目の定義（穂先・根本・高さ・圃場全景の4点）
+    const IMAGE_FIELDS = [
+      { id: "imgFieldHigh", key: "imgFieldHigh", label: "圃場全体（高視点）" },
+      { id: "imgFieldLow",  key: "imgFieldLow",  label: "圃場全体（低視点）" },
+      { id: "imgPlant",     key: "imgPlant",     label: "稲株全体" },
+      { id: "imgBase",      key: "imgBase",      label: "株元" },
+      { id: "imgGround",    key: "imgGround",    label: "地面" }
+    ];
+
+    // よく使う要素をまとめてキャッシュ
+    const els = {
+      lat: () => document.getElementById('lat'),
+      lng: () => document.getElementById('lng'),
+      status: () => document.getElementById('status'),
+      sendBtn: () => document.getElementById('sendBtn'),
+      fieldId: () => document.getElementById('fieldId'),
+      legend: () => document.getElementById('legend'),
+      gpsModal: () => document.getElementById('gpsModal'),
+      iosBlock: () => document.getElementById('iosBlock'),
+      androidBlock: () => document.getElementById('androidBlock'),
+      iosBadge: () => document.getElementById('iosBadge'),
+      androidBadge: () => document.getElementById('androidBadge'),
+      secretKeyModal: () => document.getElementById('secretKeyModal'),
+      secretKeyInput: () => document.getElementById('secretKeyInput'),
+      userNameInput: () => document.getElementById('userNameInput'),
+      showSecretKeyChk: () => document.getElementById('showSecretKeyChk'),
+      currentUserLabel: () => document.getElementById('currentUserLabel')
+    };
+
+    let map, marker;
+    let deviceLat = null, deviceLng = null;   // ★ 端末GPSで取得した座標（spreadsheet書き込みで最優先）
+    // 位置情報はGPS専用のため、地図選択フォールバック(selectedLat/Lng)は廃止。
+    let geoPermissionStatus = null;
+    let secretKey = null;
+    let userName = null;
+    let pendingSubmitAfterKey = false;
+    let fieldBounds = null;
+
+    // -------------------------------------------------------------
+    // 端末判定（モーダル内の該当セクション強調）
+    // -------------------------------------------------------------
+    function detectOS() {
+      const ua = navigator.userAgent || navigator.vendor || "";
+      const isIOS = /iPad|iPhone|iPod/.test(ua) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) return 'ios';
+      if (/android/i.test(ua)) return 'android';
+      return 'other';
+    }
+    function highlightCurrentOsInModal() {
+      const os = detectOS();
+      els.iosBlock().classList.toggle('current', os === 'ios');
+      els.androidBlock().classList.toggle('current', os === 'android');
+      els.iosBadge().style.display = os === 'ios' ? 'inline-block' : 'none';
+      els.androidBadge().style.display = os === 'android' ? 'inline-block' : 'none';
+    }
+
+    // -------------------------------------------------------------
+    // ユーザー名・送信キーの管理
+    // -------------------------------------------------------------
+    function loadUserSettings() {
+      secretKey = Store.get(CONFIG.SECRET_KEY_STORAGE_NAME);
+      userName = Store.get(CONFIG.USER_NAME_STORAGE_NAME);
+      updateUserLabel();
+    }
+    function updateUserLabel() {
+      const _lbl = els.currentUserLabel(); if (_lbl) _lbl.innerText = userName ? userName : "未設定";
+    }
+    function openSecretKeyModal(isEdit) {
+      els.userNameInput().value = isEdit && userName ? userName : "";
+      els.secretKeyInput().value = isEdit && secretKey ? secretKey : "";
+      els.showSecretKeyChk().checked = false;
+      els.secretKeyInput().type = "password";
+      els.secretKeyModal().style.display = 'flex';
+      setTimeout(() => els.userNameInput().focus(), 50);
+    }
+    function closeSecretKeyModal() {
+      els.secretKeyModal().style.display = 'none';
+      pendingSubmitAfterKey = false;
+    }
+    function toggleSecretKeyVisibility() {
+      els.secretKeyInput().type = els.showSecretKeyChk().checked ? "text" : "password";
+    }
+    function saveUserSettings() {
+      const nameValue = els.userNameInput().value.trim();
+      const keyValue = els.secretKeyInput().value.trim();
+      if (!nameValue) { alert("ユーザー名を入力してください。"); return; }
+      if (!keyValue) { alert("送信キーを入力してください。"); return; }
+      userName = nameValue;
+      secretKey = keyValue;
+      Store.set(CONFIG.USER_NAME_STORAGE_NAME, userName);
+      Store.set(CONFIG.SECRET_KEY_STORAGE_NAME, secretKey);
+      updateUserLabel();
+      els.secretKeyModal().style.display = 'none';
+      if (pendingSubmitAfterKey) {
+        pendingSubmitAfterKey = false;
+        sendData();
+      } else {
+        alert("利用者情報を保存しました。次回以降の入力は不要です。");
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 地図の初期化
+    // -------------------------------------------------------------
+    function initMap() {
+      map = L.map('map').setView([CONFIG.DEFAULT_LAT, CONFIG.DEFAULT_LNG], 14);
+      // 標準地図（OpenStreetMap）※キー不要
+      const osmLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap',
+        maxZoom: 19
+      });
+
+      // 衛星写真（Esri World Imagery）※APIキー不要・帰属表示は必須
+      const esriSat = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+        attribution: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community',
+        maxZoom: 19
+      });
+
+      // 衛星写真上に地名・道路ラベルを重ねる（任意・視認性向上）
+      const esriLabels = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}', {
+        attribution: '', maxZoom: 19, opacity: 0.9
+      });
+      const satelliteGroup = L.layerGroup([esriSat, esriLabels]);
+
+      // 初期表示は衛星写真（圃場の判読がしやすい）
+      satelliteGroup.addTo(map);
+
+      // 右上に「衛星写真 / 標準地図」の切替コントロールを追加
+      L.control.layers(
+        { "衛星写真": satelliteGroup, "標準地図": osmLayer },
+        null,
+        { position: 'topright' }
+      ).addTo(map);
+
+      // 現在地マーカー（GPS取得位置の表示のみ・ドラッグ/タップ調整は不可）
+      marker = L.marker([CONFIG.DEFAULT_LAT, CONFIG.DEFAULT_LNG], { draggable: false }).addTo(map);
+      marker.bindTooltip("現在地（GPS）", { direction: 'top' });
+      // ※ 位置情報はGPS専用のため、地図クリック/ドラッグでの座標調整は行いません。
+
+      loadFieldPins();            // ★ 圃場データを読み込んでピン表示
+      checkGeoPermissionAndLocate();
+    }
+
+    // -------------------------------------------------------------
+    // 品種ごとの色割り当て（作付計画_品種カラム）
+    // -------------------------------------------------------------
+    const COLOR_PALETTE = [
+      '#e6194B','#3cb44b','#4363d8','#f58231','#911eb4','#42d4f4','#f032e6',
+      '#bfef45','#fabed4','#469990','#9A6324','#800000','#808000','#000075','#a9a9a9'
+    ];
+    const varietyColors = {};
+    let colorIndex = 0;
+    function colorForVariety(v) {
+      const key = (v == null || v === "") ? "未設定" : v;
+      if (!(key in varietyColors)) {
+        varietyColors[key] = COLOR_PALETTE[colorIndex % COLOR_PALETTE.length];
+        colorIndex++;
+      }
+      return varietyColors[key];
+    }
+    function buildLegend() {
+      const legend = els.legend();
+      legend.innerHTML = "";
+      Object.keys(varietyColors).forEach(v => {
+        const item = document.createElement('div');
+        item.className = 'legend-item';
+        item.innerHTML = `<span class="legend-dot" style="background:${varietyColors[v]}"></span>${v}`;
+        legend.appendChild(item);
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 圃場データの読み込み → 緯度経度のあるものをピン表示
+    // -------------------------------------------------------------
+    async function loadFieldPins() {
+      try {
+        const res = await fetch(CONFIG.FIELD_JSON_URL, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        const withCoords = data.filter(f => f.latitude != null && f.longitude != null);
+        const pts = [];
+
+        withCoords.forEach(f => {
+          const variety = f['作付計画_品種'];
+          const color = colorForVariety(variety);
+          const cm = L.circleMarker([f.latitude, f.longitude], {
+            radius: 8, color: '#ffffff', weight: 2, fillColor: color, fillOpacity: 0.9
+          }).addTo(map);
+
+          const name = f['圃場名'] || '';
+          // 担当者（データのカラム名ゆらぎに対応してフォールバック）
+          const person = f['作付計画_担当者'] || f['担当者'] || f['作業者'] || f['作付計画_作業者'] || '';
+          // タップ時のポップアップは「圃場名・品種・担当者」＋「決定」ボタンを表示する
+          const nameEsc = String(name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+          cm.bindPopup(
+            `<b>${name}</b><br>品種: ${variety || '未設定'}<br>担当者: ${person || '未設定'}` +
+            `<br><button type="button" onclick="confirmField('${nameEsc}')" ` +
+            `style="margin-top:8px;padding:8px 14px;border:none;border-radius:0;background:#111;color:#fff;font-weight:600;cursor:pointer;">決定</button>`,
+            { autoPan: false, closeButton: true }
+          );
+          // ピンのタップで圃場IDに自動入力（座標は端末GPS優先のため変更しない）
+          cm.on('click', () => selectField(name));
+
+          pts.push([f.latitude, f.longitude]);
+        });
+
+        buildLegend();
+
+        if (pts.length) {
+          fieldBounds = L.latLngBounds(pts);
+          // 端末GPSがまだ無い場合のみ、全ピンが見える範囲に合わせる
+          if (!deviceLat) map.fitBounds(fieldBounds.pad(0.25));
+        }
+      } catch (e) {
+        console.warn('圃場データ(KSAS_field.json)の読み込みに失敗しました:', e);
+        els.legend().innerHTML =
+          '<span style="color:#b00020;font-size:0.75rem;">圃場データを読み込めませんでした（KSAS_field.json を index.html と同じ場所に配置してください）。</span>';
+      }
+    }
+
+    // ピンから圃場名を圃場IDへ自動入力
+    function selectField(name) {
+      els.fieldId().value = name;
+      // キーボード起動・画面拡大を防ぐため focus() は行わない（読み取り専用入力）
+      // 端末GPSの座標を優先するため、選択座標は上書きしない
+    }
+
+    // ポップアップの「決定」ボタン：圃場を確定し、「次へ」ボタンまでスクロールダウン
+    function confirmField(name) {
+      selectField(name);
+      if (map) map.closePopup();   // ポップアップを閉じてから移動
+      const nextBtn = document.getElementById('toStep2Btn');
+      if (nextBtn) {
+        // 「次へ」ボタンが画面に見えるところまでスクロール
+        nextBtn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 位置情報許可の確認
+    // -------------------------------------------------------------
+    async function checkGeoPermissionAndLocate() {
+      if (!navigator.geolocation) { setCoordsWarning(); showGpsModal(); return; }
+      if (navigator.permissions && navigator.permissions.query) {
+        try {
+          geoPermissionStatus = await navigator.permissions.query({ name: 'geolocation' });
+          handlePermissionState(geoPermissionStatus.state);
+          geoPermissionStatus.onchange = () => handlePermissionState(geoPermissionStatus.state);
+          return;
+        } catch (e) {
+          console.warn("Permissions API 未対応のためフォールバック", e);
+        }
+      }
+      getCurrentLocation();
+    }
+    function handlePermissionState(state) {
+      if (state === 'denied') { setCoordsWarning(); showGpsModal(); }
+      else { getCurrentLocation(); }
+    }
+    function setCoordsWarning() {
+      els.lat().innerText = "許可されていません";
+      els.lng().innerText = "許可されていません";
+      els.lat().classList.add('warn');
+      els.lng().classList.add('warn');
+    }
+    function clearCoordsWarning() {
+      els.lat().classList.remove('warn');
+      els.lng().classList.remove('warn');
+    }
+
+    // -------------------------------------------------------------
+    // 現在地の取得（端末GPS）
+    // -------------------------------------------------------------
+    function getCurrentLocation() {
+      if (!navigator.geolocation) { showGpsModal(); return; }
+      els.lat().innerText = "取得中...";
+      els.lng().innerText = "取得中...";
+      clearCoordsWarning();
+
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          // ★ 端末GPS座標を保持（spreadsheet書き込みで最優先）
+          deviceLat = parseFloat(lat).toFixed(6);
+          deviceLng = parseFloat(lng).toFixed(6);
+          map.setView([lat, lng], 17);
+          marker.setLatLng([lat, lng]);
+          els.lat().innerText = deviceLat;
+          els.lng().innerText = deviceLng;
+              clearCoordsWarning();
+          closeGpsModal();
+        },
+        (err) => {
+          console.warn("GPSエラー:", err);
+          if (err.code === err.PERMISSION_DENIED) { setCoordsWarning(); showGpsModal(); }
+          else { els.lat().innerText = "取得エラー"; els.lng().innerText = "取得エラー"; }
+        },
+        { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
+      );
+    }
+
+    // 位置情報はGPS専用（地図での座標調整は廃止）
+
+    // -------------------------------------------------------------
+    // GPS許可モーダル
+    // -------------------------------------------------------------
+    function showGpsModal() { highlightCurrentOsInModal(); els.gpsModal().style.display = 'flex'; }
+    function closeGpsModal() { els.gpsModal().style.display = 'none'; }
+    function retryLocationFromModal() { closeGpsModal(); checkGeoPermissionAndLocate(); }
+
+    // -------------------------------------------------------------
+    // 撮影ボタンの状態表示
+    // -------------------------------------------------------------
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, (c) => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[c]));
+    }
+    function onCaptureChange(fieldId) {
+      const input = document.getElementById(fieldId);
+      const nameSpan = document.getElementById(fieldId + '_name');
+      const file = input.files[0];
+      const checkSvg = '<svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+      if (file) {
+        nameSpan.innerHTML = checkSvg + escapeHtml(file.name);
+        nameSpan.classList.remove('empty'); nameSpan.classList.add('done');
+      } else {
+        nameSpan.textContent = "未撮影";
+        nameSpan.classList.add('empty'); nameSpan.classList.remove('done');
+      }
+    }
+    function resetCaptureDisplays() {
+      IMAGE_FIELDS.forEach(f => {
+        const nameSpan = document.getElementById(f.id + '_name');
+        nameSpan.innerText = "未撮影";
+        nameSpan.classList.add('empty'); nameSpan.classList.remove('done');
+      });
+    }
+
+    // -------------------------------------------------------------
+    // 画像圧縮
+    // -------------------------------------------------------------
+    const compressImageAndToBase64 = (file, maxSide = CONFIG.IMAGE_MAX_SIDE, quality = CONFIG.IMAGE_QUALITY) => {
+      return new Promise((resolve, reject) => {
+        if (!file) return resolve("");
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+          const img = new Image();
+          img.src = event.target.result;
+          img.onload = () => {
+            let width = img.width, height = img.height;
+            if (width > height) {
+              if (width > maxSide) { height = Math.round((height * maxSide) / width); width = maxSide; }
+            } else {
+              if (height > maxSide) { width = Math.round((width * maxSide) / height); height = maxSide; }
+            }
+            const canvas = document.createElement('canvas');
+            canvas.width = width; canvas.height = height;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#FFFFFF'; ctx.fillRect(0, 0, width, height);
+            ctx.drawImage(img, 0, 0, width, height);
+            resolve(canvas.toDataURL('image/jpeg', quality));
+          };
+          img.onerror = (err) => reject(err);
+        };
+        reader.onerror = (err) => reject(err);
+      });
+    };
+
+    // -------------------------------------------------------------
+    // 入力チェック
+    // -------------------------------------------------------------
+    function getSelectedFiles() {
+      return IMAGE_FIELDS.map(f => ({ ...f, file: document.getElementById(f.id).files[0] }));
+    }
+    // ★ spreadsheetへ書き込む座標：GPS専用
+    function getSubmitCoords() {
+      return { lat: deviceLat, lng: deviceLng, source: deviceLat ? "device-gps" : "none" };
+    }
+    function validateForm(fieldId, files, coords) {
+      if (!coords.lat || !coords.lng) {
+        alert("位置情報が取得できていません。");
+        showGpsModal();
+        return false;
+      }
+      if (!fieldId) { alert("圃場IDを入力してください（地図のピンをタップしても入力できます）。"); return false; }
+      const missing = files.filter(f => !f.file);
+      if (missing.length > 0) {
+        alert(`${IMAGE_FIELDS.length}枚すべての画像を撮影してください。\n未撮影: ${missing.map(f => f.label).join('、')}`);
+        return false;
+      }
+      if (CONFIG.GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE") { alert("GASのWeb App URLが設定されていません。"); return false; }
+      return true;
+    }
+    function resetForm() {
+      els.fieldId().value = "";
+      IMAGE_FIELDS.forEach(f => { document.getElementById(f.id).value = ""; });
+      resetCaptureDisplays();
+    }
+
+    // -------------------------------------------------------------
+    // 送信処理
+    // -------------------------------------------------------------
+    async function sendData() {
+      const fieldId = els.fieldId().value.trim();
+      const files = getSelectedFiles();
+      const coords = getSubmitCoords();
+      const statusDiv = els.status();
+      const btn = els.sendBtn();
+
+      statusDiv.className = "status-msg";
+      statusDiv.innerText = "";
+
+      if (!secretKey || !userName) {
+        pendingSubmitAfterKey = true;
+        openSecretKeyModal(false);
+        return;
+      }
+      if (!validateForm(fieldId, files, coords)) return;
+
+      btn.disabled = true;
+      btn.innerText = "画像圧縮・送信中...";
+
+      try {
+        const compressed = await Promise.all(files.map(f => compressImageAndToBase64(f.file)));
+
+        const payload = {
+          secretKey: secretKey,
+          userName: userName,
+          fieldId: fieldId,
+          lat: coords.lat,          // ★ 端末GPS優先の緯度
+          lng: coords.lng,          // ★ 端末GPS優先の経度
+          coordSource: coords.source
+        };
+        files.forEach((f, i) => { payload[f.key] = compressed[i]; });
+
+        await fetch(CONFIG.GAS_WEB_APP_URL, {
+          method: "POST",
+          mode: "no-cors",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload)
+        });
+
+        statusDiv.className = "status-msg success";
+        statusDiv.innerText = "送信完了しました。";
+        alert("正常に保存されました。");
+        resetForm();
+        switchStep(1);   // 送信完了後は圃場選択（Step1）へ戻る
+      } catch (err) {
+        console.error("送信エラー:", err);
+        statusDiv.className = "status-msg error";
+        statusDiv.innerText = "送信エラーが発生しました。";
+        alert("送信に失敗しました: " + err.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = "送信";
+      }
+    }
+
+    // -------------------------------------------------------------
+    // 2ステップ画面遷移（Step1: 圃場選択・GPS / Step2: 写真撮影）
+    // -------------------------------------------------------------
+    function switchStep(n) {
+      document.getElementById('step1').classList.toggle('active', n === 1);
+      document.getElementById('step2').classList.toggle('active', n === 2);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      if (n === 1 && map) { setTimeout(() => map.invalidateSize(), 60); }
+    }
+    function goToStep2() {
+      const fieldId = els.fieldId().value.trim();
+      const coords = getSubmitCoords();
+      if (!coords.lat || !coords.lng) {
+        alert("位置情報（GPS）が取得できていません。「現在地取得」をタップして取得してください。");
+        showGpsModal();
+        return;
+      }
+      if (!fieldId) {
+        alert("圃場IDが未設定です。地図上の圃場ピンをタップして選択してください。");
+        // 読み取り専用のためキーボードは起動しない（ピンのタップで入力）
+        return;
+      }
+      document.getElementById('summaryFieldId').innerText = fieldId;
+      document.getElementById('summaryCoords').innerText = coords.lat + ", " + coords.lng + "（GPS）";
+      switchStep(2);
+    }
+    function goToStep1() { switchStep(1); }
+
+    window.onload = function () {
+      loadUserSettings();
+      initMap();
+    };
+  </script>
+</body>
+</html>
