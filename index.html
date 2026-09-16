@@ -208,8 +208,8 @@
       <!-- 撮影地点入力 -->
       <div class="card field-id-card">
         <div class="form-group">
-          <label for="fieldId">撮影地点</label>
-          <input type="text" id="fieldId" placeholder="地図の撮影地点ピンをタップして選択" readonly inputmode="none" required>
+          <label for="fieldId">撮影地点（任意）</label>
+          <input type="text" id="fieldId" placeholder="（任意）地図の撮影地点ピンをタップして選択" readonly inputmode="none">
         </div>
       </div>
 
@@ -821,16 +821,38 @@
     function getSubmitCoords() {
       return { lat: deviceLat, lng: deviceLng, source: deviceLat ? "device-gps" : "none" };
     }
+    // -------------------------------------------------------------
+    // 画像ファイル名（サロゲートキー）の生成
+    //   「タイムスタンプ + 投稿者(ユーザー名) + スポット名」を組み合わせて
+    //   一意なファイル名を作る。スポット未指定時は "nospot" を補う。
+    // -------------------------------------------------------------
+    function buildTimestamp(d = new Date()) {
+      const p = (n, l = 2) => String(n).padStart(l, '0');
+      return d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + '_' +
+             p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + '_' +
+             p(d.getMilliseconds(), 3);
+    }
+    function sanitizeForFilename(str) {
+      // ファイル名に使えない文字・空白をアンダースコアへ置換
+      return String(str || '').trim().replace(/[\\\/:*?"<>|\s]+/g, '_');
+    }
+    function buildSurrogateKey(timestamp, userName, fieldId, label, ext = 'jpg') {
+      const user = sanitizeForFilename(userName) || 'unknown';
+      const spot = sanitizeForFilename(fieldId) || 'nospot';
+      return `${timestamp}_${user}_${spot}_${label}.${ext}`;
+    }
+
     function validateForm(fieldId, files, coords) {
       if (!coords.lat || !coords.lng) {
         alert("位置情報が取得できていません。");
         showGpsModal();
         return false;
       }
-      if (!fieldId) { alert("撮影地点を入力してください（地図のピンをタップしても入力できます）。"); return false; }
-      const missing = files.filter(f => !f.file);
-      if (missing.length > 0) {
-        alert(`${IMAGE_FIELDS.length}枚すべての画像を撮影してください。\n未撮影: ${missing.map(f => f.label).join('、')}`);
+      // 撮影地点（スポット）は任意。未指定でも送信可能。
+      // 画像は「1枚以上」あれば送信可能（全5枚は不要）。
+      const provided = files.filter(f => f.file);
+      if (provided.length === 0) {
+        alert("画像を1枚以上撮影してください。");
         return false;
       }
       if (CONFIG.GAS_WEB_APP_URL === "YOUR_GAS_WEB_APP_URL_HERE") { alert("GASのWeb App URLが設定されていません。"); return false; }
@@ -866,17 +888,28 @@
       btn.innerText = "画像圧縮・送信中...";
 
       try {
-        const compressed = await Promise.all(files.map(f => compressImageAndToBase64(f.file)));
+        // 撮影された画像のみを対象にする（1枚以上でOK）
+        const provided = files.filter(f => f.file);
+        const compressed = await Promise.all(provided.map(f => compressImageAndToBase64(f.file)));
+
+        // この送信で共通のタイムスタンプ（サロゲートキーに使用）
+        const timestamp = buildTimestamp();
 
         const payload = {
           secretKey: secretKey,
           userName: userName,
-          fieldId: fieldId,
+          fieldId: fieldId,         // 未指定なら空文字（スポットは任意）
+          timestamp: timestamp,     // 送信タイムスタンプ
           lat: coords.lat,          // ★ 端末GPS優先の緯度
           lng: coords.lng,          // ★ 端末GPS優先の経度
           coordSource: coords.source
         };
-        files.forEach((f, i) => { payload[f.key] = compressed[i]; });
+        // 画像本体（Base64）と、サロゲートキー方式のファイル名をセットで送信
+        provided.forEach((f, i) => {
+          const fileName = buildSurrogateKey(timestamp, userName, fieldId, f.label);
+          payload[f.key] = compressed[i];
+          payload[f.key + "_filename"] = fileName;
+        });
 
         await fetch(CONFIG.GAS_WEB_APP_URL, {
           method: "POST",
@@ -918,12 +951,8 @@
         showGpsModal();
         return;
       }
-      if (!fieldId) {
-        alert("撮影地点が未設定です。地図上の撮影地点ピンをタップして選択してください。");
-        // 読み取り専用のためキーボードは起動しない（ピンのタップで入力）
-        return;
-      }
-      document.getElementById('summaryFieldId').innerText = fieldId;
+      // 撮影地点（スポット）は任意。未指定でも次へ進める。
+      document.getElementById('summaryFieldId').innerText = fieldId || "（指定なし）";
       document.getElementById('summaryCoords').innerText = coords.lat + ", " + coords.lng + "（GPS）";
       switchStep(2);
     }
