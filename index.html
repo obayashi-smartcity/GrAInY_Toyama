@@ -365,21 +365,13 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="config.js"></script>
 
   <script>
     // =============================================================
     // ★ 設定項目
     // =============================================================
-    const CONFIG = {
-      GAS_WEB_APP_URL: "https://script.google.com/macros/s/AKfycbwNK-fs6ucvjPYntcSlvMBMF1oHr5GArVlnSeqPiPD1uR3GG7B2bobIBnk9FL2LVhKAyw/exec", // ご自身のGASのWeb App URL
-      FIELD_JSON_URL: "EventList.json",   // index.html と同じフォルダに配置する撮影地点（イベント）データ
-      SECRET_KEY_STORAGE_NAME: "fieldCollector_secretKey",
-      USER_NAME_STORAGE_NAME: "fieldCollector_userName",
-      DEFAULT_LAT: 36.6953,   // 撮影地点データの中心付近（富山市中心部）
-      DEFAULT_LNG: 137.2130,
-      IMAGE_MAX_SIDE: 1280,
-      IMAGE_QUALITY: 0.75
-    };
+    const CONFIG = window.APP_CONFIG;
 
     // =============================================================
     // 永続ストレージ（iOS対策）
@@ -871,7 +863,7 @@
     }
 
     function validateForm(fieldId, files, coords) {
-      if (!coords.lat || !coords.lng) {
+      if ((!coords.lat || !coords.lng) && !CONFIG.ALLOW_STEP2_WITHOUT_GPS) {
         alert("位置情報が取得できていません。");
         showGpsModal();
         return false;
@@ -981,14 +973,17 @@
     function goToStep2() {
       const fieldId = els.fieldId().value.trim();
       const coords = getSubmitCoords();
-      if (!coords.lat || !coords.lng) {
+      if ((!coords.lat || !coords.lng) && !CONFIG.ALLOW_STEP2_WITHOUT_GPS) {
         alert("位置情報（GPS）が取得できていません。「現在地取得」をタップして取得してください。");
         showGpsModal();
         return;
       }
       // 撮影地点（スポット）は任意。未指定でも次へ進める。
       document.getElementById('summaryFieldId').innerText = fieldId || "（指定なし）";
-      document.getElementById('summaryCoords').innerText = coords.lat + ", " + coords.lng + "（GPS）";
+      document.getElementById('summaryCoords').innerText =
+        (coords.lat && coords.lng)
+          ? coords.lat + ", " + coords.lng + "（GPS）"
+          : "GPS未取得";
       switchStep(2);
     }
     function goToStep1() { switchStep(1); }
