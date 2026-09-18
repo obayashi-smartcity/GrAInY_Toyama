@@ -218,7 +218,7 @@
       <div class="card field-id-card">
         <div class="form-group">
           <label for="fieldId">撮影地点（任意）</label>
-          <input type="text" id="fieldId" placeholder="（任意）地図の撮影地点ピンをタップして選択" readonly inputmode="none">
+          <input type="text" id="fieldId" placeholder="（任意）地図の撮影地点ピンをタップ、または直接入力">
         </div>
       </div>
 
@@ -680,7 +680,8 @@
     // ピンから地点名を撮影地点へ自動入力
     function selectField(name) {
       els.fieldId().value = name;
-      // キーボード起動・画面拡大を防ぐため focus() は行わない（読み取り専用入力）
+      // ピンから自動入力する場合は focus() を呼ばないため、キーボードは表示されない
+      // （テキストボックスを直接タップした場合は通常のinputとしてキーボードが表示される）
       // 端末GPSの座標を優先するため、選択座標は上書きしない
     }
 
